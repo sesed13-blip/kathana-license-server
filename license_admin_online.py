@@ -32,7 +32,7 @@ def main():
         return
 
     if len(sys.argv) < 2:
-        print("python license_admin_online.py create [count]")
+        print("python license_admin_online.py create [count] [days]")
         print("python license_admin_online.py revoke CODE")
         return
 
@@ -45,11 +45,18 @@ def main():
             print("Count must be a number.")
             return
 
+        try:
+            days = int(sys.argv[3]) if len(sys.argv) > 3 else 30
+        except ValueError:
+            print("Days must be a number.")
+            return
+
         result = request(
             "/api/admin/create",
             {
                 "admin_secret": ADMIN_SECRET,
-                "count": count
+                "count": count,
+                "duration_days": days
             }
         )
 
