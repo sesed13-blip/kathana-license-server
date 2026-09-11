@@ -38,11 +38,19 @@ def db():
             created_at TEXT NOT NULL,
             activated_at TEXT,
             expires_at TEXT,
+            duration_days INTEGER NOT NULL DEFAULT 30,
             device_id TEXT,
             status TEXT NOT NULL DEFAULT 'UNUSED'
         )
     """)
     conn.commit()
+
+    # Upgrade databases created by older versions that did not have duration_days.
+    columns = {row["name"] for row in conn.execute("PRAGMA table_info(licenses)").fetchall()}
+    if "duration_days" not in columns:
+        conn.execute("ALTER TABLE licenses ADD COLUMN duration_days INTEGER NOT NULL DEFAULT 30")
+        conn.commit()
+
     return conn
 
 
@@ -138,8 +146,9 @@ def activate():
                 "message": "License expired."
             })
 
-        # UNUSED -> activate for exactly 30 days.
-        expires = current + timedelta(days=30)
+        # UNUSED -> activate for the duration stored on the code.
+        duration_days = int(row["duration_days"] or 30)
+        expires = current + timedelta(days=duration_days)
 
         conn.execute("""
             UPDATE licenses
@@ -245,7 +254,13 @@ def admin_create():
     except Exception:
         count = 1
 
+    try:
+        duration_days = int(payload.get("duration_days", 30))
+    except Exception:
+        duration_days = 30
+
     count = max(1, min(count, 100))
+    duration_days = max(1, min(duration_days, 3650))
 
     conn = db()
     try:
@@ -261,8 +276,8 @@ def admin_create():
                 code = create_code()
 
             conn.execute(
-                "INSERT INTO licenses(code, created_at, status) VALUES (?, ?, 'UNUSED')",
-                (code, iso(now_utc()))
+                "INSERT INTO licenses(code, created_at, duration_days, status) VALUES (?, ?, ?, 'UNUSED')",
+                (code, iso(now_utc()), duration_days)
             )
             codes.append(code)
 
